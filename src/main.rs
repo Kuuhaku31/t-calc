@@ -1,8 +1,11 @@
 
 mod utils;
+mod models;
 
 use calamine::{Ods, OdsError, Reader};
 use std::env;
+
+use crate::models::Table;
 
 
 fn main() {
@@ -47,17 +50,20 @@ fn run() -> Result<(), String> {
     let end_row = end_row.saturating_sub(row_offset);
     let end_col = end_col.saturating_sub(col_offset);
 
-    // 打印数据
+    // 获取数据
+    let mut table = Table::new(end_col - start_col + 1, end_row - start_row + 1);
     for row in start_row..=end_row {
         for col in start_col..=end_col {
             match data.get((row, col)) {
-                Some(value) => print!("{value}\t"),
-                None        => print!("\t"),
+                Some(value) => table.set(row - start_row, col - start_col, value.to_string()),
+                None        => table.set(row - start_row, col - start_col, String::new()),
             }
         }
-        println!();
     }
 
+    println!("Table:\n行数: {}, 列数: {}\n{}",
+        table.get_row_count(), table.get_column_count(), table.as_string()
+    );
 
     Ok(())
 }
