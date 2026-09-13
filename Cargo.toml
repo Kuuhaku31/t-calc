@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 calamine = "0.36.1"
+rusqlite = "0.40.2"

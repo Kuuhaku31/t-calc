@@ -1,69 +1,90 @@
 
+// src/main.rs
+// 主程序入口
+
 mod utils;
 mod models;
+mod sqlite;
+mod ods;
 
-use calamine::{Ods, OdsError, Reader};
 use std::env;
-
-use crate::models::Table;
 
 
 fn main() {
-    if let Err(e) = run() {
-        eprintln!("错误: {e}");
-        print_help();
-        std::process::exit(1);
+
+    match env::args().nth(1).as_deref() {
+        Some("print") => {
+            let args = env::args().skip(1).collect();
+
+            if let Err(e) = run_print(args) {
+                eprintln!("错误: {e}");
+                print_help();
+                std::process::exit(1);
+            }
+        }
+
+        Some("to-sqlite") => {
+            let args = env::args().skip(1).collect();
+
+            if let Err(e) = run_to_sqlite(args) {
+                eprintln!("错误: {e}");
+                print_help();
+                std::process::exit(1);
+            }
+        }
+
+        _ => {
+            print_help();
+            std::process::exit(1);
+        }
     }
 }
 
+fn run_print(args: Vec<String>) -> Result<(), String> {
 
-fn run() -> Result<(), String> {
+    print!("开始打印 ODS 数据: args: {:?}", args);
 
-    let path       = env::args().nth(1).ok_or("缺少 ODS 文件路径")?;
-    let sheet_name = env::args().nth(2).ok_or("缺少工作表名")?;
-    let range      = env::args().nth(3).ok_or("缺少区域, 例如 B3:E373")?;
+    let path = args.get(1).ok_or("缺少 ODS 文件路径")?;
+    let sheet_name = args.get(2).ok_or("缺少工作表名")?;
+    let range = args.get(3).ok_or("缺少区域, 例如 B3:E373")?;
 
-    // 打开 ODS
-    let mut workbook: Ods<_> = calamine::open_workbook(path)
-    .map_err(|e: OdsError| e.to_string())?;
+    let table = ods::read_ods_table(path, sheet_name, range)?;
 
-    // 读取指定的工作表
-    let sheet = sheet_name.as_str();
+    println!(
+        "Table:\n行数: {}, 列数: {}\n{}",
+        table.get_row_count(),
+        table.get_column_count(),
+        table.as_string()
+    );
 
-    // 获取工作表数据
-    let data = workbook.worksheet_range(&sheet).map_err(|e| e.to_string())?;
+    Ok(())
+}
 
-    // 解析区域
-    // 这里是基于整个 sheet 的 0-based 索引
-    let (start_col, start_row, end_col, end_row) = utils::parse_range(&range).map_err(|e| e.to_string())?;
-    println!("读取区域: {start_col}, {start_row}, {end_col}, {end_row}");
+fn run_to_sqlite(args: Vec<String>) -> Result<(), String> {
 
-    // Range 在工作表中的实际起始位置
-    let (data_start_row, data_start_col) = data.start()
-    .ok_or_else(|| "工作表为空".to_string())?;
-    let row_offset = data_start_row as usize;
-    let col_offset = data_start_col as usize;
+    println!("开始插入更新 SQLite: args: {:?}", args);
 
-    // 数据区域内的起始和结束行列
-    let start_row = start_row.saturating_sub(row_offset);
-    let start_col = start_col.saturating_sub(col_offset);
-    let end_row = end_row.saturating_sub(row_offset);
-    let end_col = end_col.saturating_sub(col_offset);
+    let path = args.get(1).ok_or("缺少 ODS 文件路径")?;
+    let sheet_name = args.get(2).ok_or("缺少工作表名")?;
+    let range = args.get(3).ok_or("缺少区域, 例如 B3:E373")?;
+    let db_path = args.get(4).ok_or("缺少 SQLite 数据库路径")?;
+    let table_name = args.get(5).ok_or("缺少表名")?;
 
-    // 获取数据
-    let mut table = Table::new(end_col - start_col + 1, end_row - start_row + 1);
-    for row in start_row..=end_row {
-        for col in start_col..=end_col {
-            match data.get((row, col)) {
-                Some(value) => table.set(row - start_row, col - start_col, value.to_string()),
-                None        => table.set(row - start_row, col - start_col, String::new()),
-            }
-        }
+    let primary_keys: Vec<String> =
+        args.iter().skip(6).cloned().collect();
+
+    if primary_keys.is_empty() {
+        return Err("至少需要一个主键列名".to_string());
     }
 
-    println!("Table:\n行数: {}, 列数: {}\n{}",
-        table.get_row_count(), table.get_column_count(), table.as_string()
-    );
+    let table = ods::read_ods_table(path, sheet_name, range)?;
+
+    sqlite::upsert_sqlite(
+        db_path,
+        table_name,
+        table,
+        primary_keys,
+    )?;
 
     Ok(())
 }
@@ -71,8 +92,13 @@ fn run() -> Result<(), String> {
 
 fn print_help() {
     println!(
-"
+        "
 用法:
-    cargo run -- <ods 文件路径> <工作表名> <区域>
-");
+    cargo run print <ods 文件路径> <工作表名> <区域>
+        -- 打印指定区域的数据
+
+    cargo run to-sqlite <ods 文件路径> <工作表名> <区域> <sqlite 数据库路径> <表名> <主键列名1 主键列名2 ...>
+        -- 将指定区域的数据导入 SQLite 数据库
+"
+    );
 }

@@ -8,7 +8,9 @@ pub struct Table {
     column_count: usize, // 列数
     row_count: usize,    // 行数
 
-    data: Vec<String>,   // 数据, 按行优先存储, 大小为 column_count * row_count
+    /// 数据, 按行优先存储, 大小为 column_count * row_count,
+    /// 第一行数据是表头
+    data: Vec<String>,
 
 }
 
