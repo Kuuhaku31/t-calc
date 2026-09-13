@@ -1,0 +1,7 @@
+[package]
+name = "t-calc"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+calamine = "0.36.1"
