@@ -6,17 +6,26 @@ mod utils;
 mod models;
 mod sqlite;
 mod ods;
+mod cli;
 
 use std::env;
+
+use crate::cli::Command;
 
 
 fn main() {
 
+    let cmd = cli::parse_command().unwrap_or_else(|e| {
+        eprintln!("错误: {e}");
+        print_help();
+        std::process::exit(1);
+    });
+    // 打印命令和选项
+    println!("命令: {:?}", cmd.as_string());
+
     match env::args().nth(1).as_deref() {
         Some("print") => {
-            let args = env::args().skip(1).collect();
-
-            if let Err(e) = run_print(args) {
+            if let Err(e) = run_print(cmd) {
                 eprintln!("错误: {e}");
                 print_help();
                 std::process::exit(1);
@@ -24,9 +33,7 @@ fn main() {
         }
 
         Some("to-sqlite") => {
-            let args = env::args().skip(1).collect();
-
-            if let Err(e) = run_to_sqlite(args) {
+                if let Err(e) = run_to_sqlite(cmd) {
                 eprintln!("错误: {e}");
                 print_help();
                 std::process::exit(1);
@@ -40,13 +47,13 @@ fn main() {
     }
 }
 
-fn run_print(args: Vec<String>) -> Result<(), String> {
+fn run_print(cmd: Command) -> Result<(), String> {
 
-    print!("开始打印 ODS 数据: args: {:?}", args);
+    print!("开始打印 ODS 数据");
 
-    let path = args.get(1).ok_or("缺少 ODS 文件路径")?;
-    let sheet_name = args.get(2).ok_or("缺少工作表名")?;
-    let range = args.get(3).ok_or("缺少区域, 例如 B3:E373")?;
+    let path = cmd.command.get(1).ok_or("缺少 ODS 文件路径")?;
+    let sheet_name = cmd.command.get(2).ok_or("缺少工作表名")?;
+    let range = cmd.command.get(3).ok_or("缺少区域, 例如 B3:E373")?;
 
     let table = ods::read_ods_table(path, sheet_name, range)?;
 
@@ -60,18 +67,18 @@ fn run_print(args: Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
-fn run_to_sqlite(args: Vec<String>) -> Result<(), String> {
+fn run_to_sqlite(cmd: Command) -> Result<(), String> {
 
-    println!("开始插入更新 SQLite: args: {:?}", args);
+    println!("开始插入更新 SQLite");
 
-    let path = args.get(1).ok_or("缺少 ODS 文件路径")?;
-    let sheet_name = args.get(2).ok_or("缺少工作表名")?;
-    let range = args.get(3).ok_or("缺少区域, 例如 B3:E373")?;
-    let db_path = args.get(4).ok_or("缺少 SQLite 数据库路径")?;
-    let table_name = args.get(5).ok_or("缺少表名")?;
+    let path = cmd.command.get(1).ok_or("缺少 ODS 文件路径")?;
+    let sheet_name = cmd.command.get(2).ok_or("缺少工作表名")?;
+    let range = cmd.command.get(3).ok_or("缺少区域, 例如 B3:E373")?;
+    let db_path = cmd.command.get(4).ok_or("缺少 SQLite 数据库路径")?;
+    let table_name = cmd.command.get(5).ok_or("缺少表名")?;
 
     let primary_keys: Vec<String> =
-        args.iter().skip(6).cloned().collect();
+        cmd.command.iter().skip(6).cloned().collect();
 
     if primary_keys.is_empty() {
         return Err("至少需要一个主键列名".to_string());
@@ -92,7 +99,7 @@ fn run_to_sqlite(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "
+"
 用法:
     cargo run print <ods 文件路径> <工作表名> <区域>
         -- 打印指定区域的数据

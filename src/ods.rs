@@ -10,10 +10,11 @@ pub(crate) fn read_ods_table(
     sheet_name: &str,
     range: &str,
 ) -> Result<Table, String> {
+
     // 打开 ODS
     let mut workbook: Ods<_> =
-        calamine::open_workbook(path)
-            .map_err(|e: OdsError| e.to_string())?;
+    calamine::open_workbook(path)
+    .map_err(|e: OdsError| format!("无法打开 ODS 文件, 地址: {}, 错误: {}", path, e))?;
 
     // 获取指定工作表
     let data = workbook
