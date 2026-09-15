@@ -104,7 +104,7 @@ pub(crate) fn upsert_sqlite(
             .get(col)
             .cloned()
             .unwrap_or_default()
-    })
+    }).flatten()
     .collect();
     // 检查 Table 表头是否重复
     for i in 0..table_columns.len() {
@@ -272,7 +272,7 @@ pub(crate) fn upsert_sqlite(
                     .get(row * table.get_column_count() + col)
                     .cloned()
                     .unwrap_or_default()
-            })
+            }).flatten()
             .collect();
 
         stmt.execute(rusqlite::params_from_iter(values.iter()))

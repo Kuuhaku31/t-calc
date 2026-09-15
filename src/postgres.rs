@@ -24,8 +24,10 @@ struct PgColumn {
 /// 9. Table 和 PostgreSQL 字段顺序不要求一致
 /// 10. PostgreSQL 中不在 keys 中的字段 -> 不处理
 /// 11. 根据 PostgreSQL 实际主键执行 UPSERT
+/// 12. 单行数据写入失败 -> 跳过该行, 不影响其他行
+/// 13. 最后打印成功/失败数量
 ///
-/// Table 中的数据全部为 String,
+/// Table 中的数据全部为 Option<String>
 /// PostgreSQL 类型转换在 SQL 中完成.
 pub(crate) fn upsert_postgresql(
     table: Table,
@@ -133,6 +135,7 @@ pub(crate) fn upsert_postgresql(
     // ------------------------------------------------------------
     // 获取 PostgreSQL 主键
     // ------------------------------------------------------------
+
     let pg_primary_keys: Vec<String> = client
     .query(
         "
@@ -171,6 +174,7 @@ pub(crate) fn upsert_postgresql(
         .get_data()
         .get(col)
         .cloned()
+        .flatten()
         .unwrap_or_default()
     })
     .collect();
@@ -261,18 +265,6 @@ pub(crate) fn upsert_postgresql(
 
     // ------------------------------------------------------------
     // 构造参数
-    //
-    // 例:
-    //
-    // integer
-    // date
-    // text
-    //
-    // 生成:
-    //
-    // ($1::text)::integer
-    // ($2::text)::date
-    // ($3::text)::text
     // ------------------------------------------------------------
     let placeholders = upsert_columns
         .iter()
@@ -370,11 +362,21 @@ pub(crate) fn upsert_postgresql(
     // ------------------------------------------------------------
     // 插入 / 更新
     //
-    // Table 第 0 行是表头
+    // 每一行使用独立 SAVEPOINT。
+    // 某一行失败时:
+    //
+    // SAVEPOINT
+    //    ↓
+    // execute 失败
+    //    ↓
+    // ROLLBACK TO SAVEPOINT
+    //    ↓
+    // 继续下一行
     // ------------------------------------------------------------
-    let mut count = 0;
+    let mut success_count = 0usize;
+    let mut failed_count = 0usize;
     for row in 1..table.get_row_count() {
-        let values: Vec<String> = table_column_indices
+        let values: Vec<Option<String>> = table_column_indices
             .iter()
             .map(|&col| {
                 table
@@ -383,7 +385,7 @@ pub(crate) fn upsert_postgresql(
                         row * table.get_column_count() + col
                     )
                     .cloned()
-                    .unwrap_or_default()
+                    .flatten()
             })
             .collect();
 
@@ -395,29 +397,81 @@ pub(crate) fn upsert_postgresql(
                 })
                 .collect();
 
-        transaction
-            .execute(&statement, &params)
-            .map_err(|e| {
-                format!(
-                    "写入 Table 第 {} 行失败: {e}\n数据: {:?}",
+        let savepoint = format!("row_{row}");
+
+        // 创建 savepoint
+        if let Err(e) = transaction.batch_execute(
+            &format!("SAVEPOINT {savepoint}")
+        ) {
+            return Err(format!(
+                "创建第 {} 行 SAVEPOINT 失败: {e}",
+                row + 1
+            ));
+        }
+
+        match transaction.execute(&statement, &params) {
+            Ok(_) => {
+                // 成功后释放 savepoint
+                if let Err(e) = transaction.batch_execute(
+                    &format!("RELEASE SAVEPOINT {savepoint}")
+                ) {
+                    return Err(format!(
+                        "释放第 {} 行 SAVEPOINT 失败: {e}",
+                        row + 1
+                    ));
+                }
+
+                success_count += 1;
+            }
+
+            Err(e) => {
+                eprintln!(
+                    "跳过 Table 第 {} 行: {e}\n数据: {:?}",
                     row + 1,
                     values
-                )
-            })?;
-        count += 1;
+                );
+
+                // 回滚当前行
+                if let Err(rollback_error) = transaction.batch_execute(
+                    &format!("ROLLBACK TO SAVEPOINT {savepoint}")
+                ) {
+                    return Err(format!(
+                        "回滚第 {} 行失败: {rollback_error}",
+                        row + 1
+                    ));
+                }
+
+                // 回滚后释放 savepoint
+                if let Err(release_error) = transaction.batch_execute(
+                    &format!("RELEASE SAVEPOINT {savepoint}")
+                ) {
+                    return Err(format!(
+                        "释放第 {} 行 SAVEPOINT 失败: {release_error}",
+                        row + 1
+                    ));
+                }
+
+                failed_count += 1;
+            }
+        }
     }
 
     drop(statement);
 
+    // ------------------------------------------------------------
+    // 提交事务
+    // ------------------------------------------------------------
     transaction
     .commit()
     .map_err(|e| {
         format!("提交 PostgreSQL 事务失败: {e}")
     })?;
 
-    println!(
-        "成功写入 {} 行数据到 PostgreSQL 表: {}",
-        count, table_name
+println!(
+    "PostgreSQL 导入完成: 共 {} 行, 成功 {} 行, 失败 {} 行",
+    success_count + failed_count,
+    success_count,
+    failed_count
     );
 
     Ok(())
