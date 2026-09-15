@@ -30,6 +30,7 @@ struct PgColumn {
 ///     ($3::text)::text
 pub(crate) fn upsert_postgresql(
     table: Table,
+    table_name: &str,
     primary_keys: Vec<String>,
 ) -> Result<(), String> {
     // ------------------------------------------------------------
@@ -51,10 +52,6 @@ pub(crate) fn upsert_postgresql(
     // ------------------------------------------------------------
     // 读取 .env
     // ------------------------------------------------------------
-
-    dotenvy::dotenv()
-        .map_err(|e| format!("加载 .env 失败: {e}"))?;
-
     let host = std::env::var("PG_HOST")
         .map_err(|_| "缺少环境变量 PG_HOST".to_string())?;
 
@@ -70,8 +67,8 @@ pub(crate) fn upsert_postgresql(
     let database = std::env::var("PG_DATABASE")
         .map_err(|_| "缺少环境变量 PG_DATABASE".to_string())?;
 
-    let table_name = std::env::var("PG_TABLE")
-        .map_err(|_| "缺少环境变量 PG_TABLE".to_string())?;
+    // let table_name = std::env::var("PG_TABLE")
+        // .map_err(|_| "缺少环境变量 PG_TABLE".to_string())?;
 
     // ------------------------------------------------------------
     // 连接 PostgreSQL
