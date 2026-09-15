@@ -144,7 +144,7 @@ fn print_help() {
     cargo run to-sqlite <ods 文件路径> <工作表名> <区域> <sqlite 数据库路径> <表名> <主键列名1 主键列名2 ...>
         -- 将指定区域的数据导入 SQLite 数据库
 
-    cargo run to-postgres <工作表名> <区域> <数据库表名> <主键列名1 主键列名2 ...>
+    cargo run to-postgres <工作表名> <区域> <数据库表名> <列名1 列名2 ...>
         -- 将指定区域的数据导入 PostgreSQL, ODS文件路径/数据库连接参数从环境变量读取:
             ODS_PATH, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, PG_DATABASE, PG_TABLE
 "
