@@ -51,7 +51,15 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
                 file_count,
                 folder_count
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4::BIGINT,
+                $5::BIGINT,
+                $6::INTEGER,
+                $7::INTEGER
+            )
             ON CONFLICT (info_hash)
             DO UPDATE SET
                 title        = EXCLUDED.title,
@@ -157,8 +165,7 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
 
             Err(error) => {
                 println!(
-                    "    FAILED: PostgreSQL 执行失败: {}",
-                    error
+                    "    FAILED: PostgreSQL 执行失败: {error:?}",
                 );
 
                 failed_count += 1;
@@ -224,4 +231,3 @@ fn info_hash_to_hex(hash: &[u8; 20]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect()
 }
-
