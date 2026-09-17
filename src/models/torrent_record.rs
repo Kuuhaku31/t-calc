@@ -35,9 +35,11 @@ pub(crate) struct TorrentRecord {
 
 impl TorrentRecord {
     pub(crate) fn get_data         (&self) ->&Vec<u8>  {&self.data         }
-    #[allow(dead_code)]
     pub(crate) fn get_size         (&self) -> usize    { self.size         }
     pub(crate) fn get_info_hash    (&self) ->&[u8; 20] {&self.info_hash    }
+    pub(crate) fn get_info_hash_str(&self) -> String {
+        self.info_hash.iter().map(|b| format!("{b:02x}")).collect()
+    }
     pub(crate) fn get_title        (&self) ->&str      {&self.title        }
     pub(crate) fn get_file_size    (&self) -> usize    { self.file_size    }
     pub(crate) fn get_file_count   (&self) -> usize    { self.file_count   }

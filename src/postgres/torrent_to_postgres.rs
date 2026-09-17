@@ -46,15 +46,17 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
                 info_hash,
                 title,
                 data,
+                size,
                 file_size,
                 file_count,
                 folder_count
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (info_hash)
             DO UPDATE SET
                 title        = EXCLUDED.title,
                 data         = EXCLUDED.data,
+                size         = EXCLUDED.size,
                 file_size    = EXCLUDED.file_size,
                 file_count   = EXCLUDED.file_count,
                 folder_count = EXCLUDED.folder_count
@@ -77,6 +79,19 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
             record.get_title(),
             hash
         );
+
+        // usize -> i64
+        let size = match i64::try_from(record.get_size()) {
+            Ok(value) => value,
+            Err(_) => {
+                println!(
+                    "    FAILED: size 超出 PostgreSQL BIGINT 范围, 跳过."
+                );
+
+                failed_count += 1;
+                continue;
+            }
+        };
 
         // usize -> i64
         let file_size = match i64::try_from(record.get_file_size()) {
@@ -120,9 +135,10 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
         let result = client.execute(
             &statement,
             &[
-                &record.get_info_hash().as_slice(),
+                &record.get_info_hash_str(),
                 &record.get_title(),
                 &record.get_data().as_slice(),
+                &size,
                 &file_size,
                 &file_count,
                 &folder_count,
@@ -132,7 +148,7 @@ pub(crate) fn upsert_torrents(records: &[TorrentRecord]) -> Result<(), String> {
         match result {
             Ok(rows) => {
                 println!(
-                    "    OK: UPSERT 成功，影响 {} 行。",
+                    "    OK: UPSERT 成功, 影响 {} 行.",
                     rows
                 );
 
