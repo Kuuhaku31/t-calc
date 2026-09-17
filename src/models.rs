@@ -2,6 +2,8 @@
 // src/models.rs
 // 数据模型
 
+mod torrent_record;
+pub(crate) use torrent_record::TorrentRecord;
 
 pub struct Table {
 

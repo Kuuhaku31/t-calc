@@ -11,7 +11,7 @@ mod postgres;
 
 use std::env;
 
-use crate::cli::Command;
+use crate::{cli::Command, models::TorrentRecord};
 
 
 fn main() {
@@ -43,6 +43,14 @@ fn main() {
 
         Some("to-postgres") => {
             if let Err(e) = run_to_postgres(cmd) {
+                eprintln!("错误: {e}");
+                print_help();
+                std::process::exit(1);
+            }
+        }
+
+        Some("torrent-to-postgres") => {
+            if let Err(e) = run_torrent_to_postgres(cmd) {
                 eprintln!("错误: {e}");
                 print_help();
                 std::process::exit(1);
@@ -134,6 +142,47 @@ fn run_to_postgres(cmd: Command) -> Result<(), String> {
 }
 
 
+fn run_torrent_to_postgres(cmd: Command) -> Result<(), String> {
+
+    println!("开始插入更新 PostgreSQL");
+
+    // 读取环境变量
+    dotenvy::dotenv().map_err(|e| format!("加载 .env 失败: {e}"))?;
+    let folder_path = cmd.command.get(1).ok_or("缺少文件夹路径")?;
+
+    // 读取文件夹内的文件
+    let mut torrent_file_paths: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(folder_path).map_err(|e| format!("读取文件夹失败: {e}"))? {
+        let entry = entry.map_err(|e| format!("读取文件夹条目失败: {e}"))?;
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(ext) = path.extension() {
+                if ext == "torrent" {
+                    torrent_file_paths.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    // 解析 torrent 文件
+    let mut torrent_files: Vec<TorrentRecord> = Vec::new();
+    for file_path in torrent_file_paths {
+        let data = std::fs::read(&file_path).map_err(|e| format!("读取文件 {} 失败: {e}", file_path))?;
+        match TorrentRecord::new(data) {
+            Ok(record) => torrent_files.push(record),
+            Err(e) => {
+                println!("解析文件 {} 失败: {e}, 跳过.", file_path);
+            }
+        }
+    }
+
+    // 插入更新 PostgreSQL
+    postgres::upsert_torrents(&torrent_files)?;
+
+    Ok(())
+}
+
+
 fn print_help() {
     println!(
 "
@@ -147,6 +196,10 @@ fn print_help() {
     cargo run to-postgres <工作表名> <区域> <数据库表名> <列名1 列名2 ...>
         -- 将指定区域的数据导入 PostgreSQL, ODS文件路径/数据库连接参数从环境变量读取:
             ODS_PATH, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, PG_DATABASE, PG_TABLE
+
+    cargo run torrent-to-postgres <文件夹路径>
+        -- 将 <文件夹路径> 内的 torrent 数据导入 PostgreSQL, 数据库连接参数从环境变量读取:
+            PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, PG_DATABASE
 "
     );
 }

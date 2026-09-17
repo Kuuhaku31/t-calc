@@ -1,4 +1,7 @@
 
+mod torrent_to_postgres;
+pub(crate) use torrent_to_postgres::upsert_torrents;
+
 use postgres::{Client, NoTls};
 
 use crate::models::Table;
