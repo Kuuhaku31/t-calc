@@ -18,7 +18,7 @@ pub struct Table {
 
 impl Table {
 
-    pub(crate) fn new(column_count: usize, row_count: usize) -> Self {
+    pub fn new(column_count: usize, row_count: usize) -> Self {
         let data = vec![None; column_count * row_count];
         Self {
             column_count,
@@ -27,7 +27,7 @@ impl Table {
         }
     }
 
-    pub(crate) fn set(&mut self, row: usize, col: usize, value: String) {
+    pub fn set(&mut self, row: usize, col: usize, value: String) {
 
         // 如果为空字符串, 则不设置
         if value.trim().is_empty() { return; }
